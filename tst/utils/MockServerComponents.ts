@@ -228,6 +228,8 @@ export function createMockSettingsManager(customSettings?: Settings) {
     mock.getCurrentSettings.returns(customSettings ?? DefaultSettings);
     mock.isReady.returns({ ready: true });
     mock.syncConfiguration.returns(Promise.resolve());
+    // Resolve immediately so tests don't hang waiting for settings to be confirmed.
+    (mock as any).initialSettingsReady = Promise.resolve();
     return mock;
 }
 

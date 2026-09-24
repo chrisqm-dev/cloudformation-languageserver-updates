@@ -11,4 +11,7 @@ export interface ISettingsSubscriber {
     subscribe<K extends SettingsPathKey>(path: K, observer: PartialDataObserver<Settings[K]>): SettingsSubscription;
 
     getCurrentSettings(): Settings;
+
+    // Resolves after the first syncConfiguration call completes (success or failure).
+    readonly initialSettingsReady: Promise<void>;
 }

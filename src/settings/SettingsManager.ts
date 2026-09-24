@@ -20,6 +20,12 @@ export class SettingsManager implements ISettingsSubscriber, ReadinessContributo
     private readonly settingsState = new SettingsState();
     private readonly subscriptionManager = new SubscriptionManager<Settings>();
     private settingsReady = false;
+    private settingsReadyResolve!: () => void;
+    // Resolves after the first syncConfiguration call (success or failure).
+    // Consumers awaiting this are guaranteed to see confirmed settings before proceeding.
+    readonly initialSettingsReady: Promise<void> = new Promise<void>((resolve) => {
+        this.settingsReadyResolve = resolve;
+    });
 
     constructor(
         private readonly workspace: LspWorkspace,
@@ -83,6 +89,10 @@ export class SettingsManager implements ISettingsSubscriber, ReadinessContributo
             this.settingsReady = true;
         } catch (error) {
             logger.error(error, `Failed to sync configuration, keeping previous settings`);
+        } finally {
+            // Always unblock waiters — on error they proceed with DefaultSettings,
+            // matching the previous behavior of no gating at all.
+            this.settingsReadyResolve();
         }
     }
 

@@ -61,6 +61,7 @@ export class CfnLintService
     private initializationPromise?: Promise<void>;
     private readonly workerManager: PyodideWorkerManager;
     private localExecutor?: LocalCfnLintExecutor;
+    private initialSettingsReady?: Promise<void>;
     private readonly log = LoggerFactory.getLogger(CfnLintService);
     private readonly mountedFolders = new Map<string, WorkspaceFolder>();
     private readonly folderMountsInProgress = new Map<string, Promise<void>>();
@@ -131,6 +132,7 @@ export class CfnLintService
 
         // Set initial settings
         this.settings = settingsManager.getCurrentSettings().diagnostics.cfnLint;
+        this.initialSettingsReady = settingsManager.initialSettingsReady;
 
         // Subscribe to diagnostics settings changes
         this.settingsSubscription = settingsManager.subscribe('diagnostics', (newDiagnosticsSettings) => {
@@ -185,6 +187,13 @@ export class CfnLintService
     }
 
     private async initializeRuntime(): Promise<void> {
+        // Wait for confirmed settings before selecting the runtime.
+        // Without this, a document open at startup can race ahead of workspace/configuration
+        // and always start Pyodide even when cfnLint.path is configured.
+        if (this.initialSettingsReady) {
+            await this.initialSettingsReady;
+        }
+
         const startTime = performance.now();
 
         if (this.settings.path) {

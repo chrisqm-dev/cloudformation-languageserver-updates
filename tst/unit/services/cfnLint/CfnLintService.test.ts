@@ -1940,6 +1940,48 @@ describe('CfnLintService', () => {
 
             expect(service.isInitialized()).toBe(true);
         });
+
+        test('should use local executor when settings arrive after initializeRuntime is triggered', async () => {
+            // Regression test for the startup race condition:
+            // a document open can trigger initializeRuntime before workspace/configuration
+            // delivers cfnLint.path. initializeRuntime must await initialSettingsReady
+            // so it reads confirmed settings, not DefaultSettings.
+            const components = createMockComponentsWithOpenTemplate();
+            const baseSettings = new SettingsState().toSettings();
+            const settingsWithPath = {
+                ...baseSettings,
+                diagnostics: {
+                    ...baseSettings.diagnostics,
+                    cfnLint: {
+                        ...baseSettings.diagnostics.cfnLint,
+                        path: '/usr/local/bin/cfn-lint',
+                    },
+                },
+            };
+
+            // Simulate delayed settings delivery: initialSettingsReady resolves only
+            // after a microtask, as happens when workspace/configuration is a round-trip.
+            let resolveSettings!: () => void;
+            const delayedSettingsReady = new Promise<void>((resolve) => {
+                resolveSettings = resolve;
+            });
+            const settingsManager = createMockSettingsManager(settingsWithPath);
+            (settingsManager as any).initialSettingsReady = delayedSettingsReady;
+
+            const service = CfnLintService.create(components);
+            service.configure(settingsManager);
+
+            // Start initialization (simulates document open at startup)
+            const initPromise = service.initialize();
+
+            // Settings arrive after init has already started
+            resolveSettings();
+            await initPromise;
+
+            // Local executor must be selected, not Pyodide
+            expect((service as any).localExecutor).toBeDefined();
+            expect(service.isInitialized()).toBe(true);
+        });
     });
 
     describe('lint result observer', () => {
